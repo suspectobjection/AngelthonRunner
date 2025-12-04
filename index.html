@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>Angelthon Runner — браузерная игра</title>
+  <meta name="description" content="Простая игра в браузере: уклоняйся от препятствий и набирай очки. Управление с клавиатуры и кнопками." />
+  <style>
+    :root {
+      --bg: #0b1220;
+      --text: #e7ecf3;
+      --muted: #a7b0bf;
+      --accent: #7dd3fc;
+      --accent2: #a78bfa;
+      --danger: #ef4444;
+      --ok: #10b981;
+      --panel: #0f1629;
+      --border: #1d2741;
+      --mono: ui-monospace, Menlo, Consolas, monospace;
+      --sans: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    }
+    * { box-sizing: border-box }
+    html, body { height: 100% }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      background: radial-gradient(1200px 600px at 80% -10%, rgba(167,139,250,.12), transparent 50%) var(--bg);
+      color: var(--text);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: flex-start;
+    }
+    header {
+      width: 100%; max-width: 900px;
+      padding: 14px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .brand { display: flex; gap: 10px; align-items: center }
+    .logo {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: grid; place-items: center; color: #0b1020; font-weight: 800;
+      box-shadow: 0 6px 20px rgba(167,139,250,.25);
+    }
+    .muted { color: var(--muted) }
+
+    main {
+      width: 100%; max-width: 900px;
+      padding: 16px;
+      display: grid; grid-template-columns: 2fr 1fr; gap: 16px;
+    }
+    @media (max-width: 900px) { main { grid-template-columns: 1fr } }
+
+    .card {
+      background: linear-gradient(180deg, rgba(15,22,41,.9), rgba(15,22,41,.7));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    canvas {
+      width: 100%;
+      height: 520px;
+      border-radius: 12px;
+      background: linear-gradient(180deg, #091021, #0e1831 55%, #122041);
+      border: 1px solid var(--border);
+      display: block;
+    }
+
+    .ui-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px }
+    button {
+      background: var(--accent);
+      color: #0b1020;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(125,211,252,.3);
+    }
+    button.secondary { background: transparent; color: var(--text) }
+    button.danger { background: var(--danger); color: #fff }
+    button:disabled { opacity: .6; cursor: not-allowed }
+
+    .stat { font-family: var(--mono); background: var(--panel); border: 1px solid var(--border);
+      padding: 8px 10px; border-radius: 10px; display: inline-flex; gap: 8px; align-items: center }
+
+    .controls {
+      display: grid; gap: 8px;
+    }
+    .ctrl-grid {
+      display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px;
+    }
+    .ctrl-btn {
+      padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border);
+      background: #0c1426; color: var(--text); font-weight: 600; cursor: pointer;
+    }
+    .ctrl-btn:active { background: #0a1120 }
+
+    .footer {
+      width: 100%; max-width: 900px;
+      border-top: 1px solid var(--border);
+      margin-top: 14px; padding: 12px 16px;
+      color: var(--muted); font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">A</div>
+      <div>
+        <div style="font-weight:800; letter-spacing:.3px">Angelthon Runner</div>
+        <div class="muted">Уклоняйся от препятствий и набирай очки</div>
+      </div>
+    </div>
+    <div class="stat" id="hud">
+      <span>Очки: <strong id="score">0</strong></span>
+      <span>Рекорд: <strong id="best">0</strong></span>
+      <span>Скорость: <strong id="speed">1.0x</strong></span>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <canvas id="game" width="720" height="520" aria-label="Игровое поле"></canvas>
+      <div class="ui-row">
+        <button id="startBtn">Старт</button>
+        <button id="pauseBtn" class="secondary">Пауза</button>
+        <button id="restartBtn" class="danger">Рестарт</button>
+        <button id="speedBtn" class="secondary">Скорость ×</button>
+      </div>
+    </section>
+
+    <aside class="card">
+      <h3 style="margin:0 0 8px">Управление</h3>
+      <p class="muted" style="margin-top:0">
+        Клавиатура: стрелки ← → или A/D. Пауза — P. Перезапуск — R.
+      </p>
+
+      <div class="controls">
+        <div class="ctrl-grid">
+          <button class="ctrl-btn" id="leftBtn">← Влево</button>
+          <button class="ctrl-btn" id="pauseMobile">⏸ Пауза</button>
+          <button class="ctrl-btn" id="rightBtn">Вправо →</button>
+        </div>
+        <button class="ctrl-btn" id="mobileStart">▶ Старт</button>
+        <button class="ctrl-btn" id="mobileRestart">⟲ Рестарт</button>
+      </div>
+
+      <h4 style="margin:12px 0 6px">Правила</h4>
+      <ul style="margin:0 0 8px 18px">
+        <li>Избегай красных препятствий.</li>
+        <li>Фиолетовые орбы — +очки.</li>
+        <li>Синий усилитель — краткий щит.</li>
+      </ul>
+
+      <h4 style="margin:12px 0 6px">Цель</h4>
+      <p class="muted" style="margin-top:0">
+        Продержись как можно дольше. Сложность растёт с очками. Рекорд сохраняется в браузере.
+      </p>
+    </aside>
+  </main>
+
+  <div class="footer">© 2025 Angelthon AI — игра целиком в index.html. Удачи!</div>
+
+  <script>
+    // Настройки игры
+    const cfg = {
+      world: { w: 720, h: 520 },
+      player: { w: 42, h: 16, y: 460, speed: 320, color: "#7dd3fc" },
+      obstacle: { wMin: 40, wMax: 120, h: 16, speed: 140 },
+      orb: { r: 6, speed: 120, color: "#a78bfa" },
+      shield: { w: 24, h: 24, speed: 100, color: "#10b981", duration: 2500 },
+      spawn: { obstacleMs: 700, orbMs: 1100, shieldMs: 7000 },
+      scorePerOrb: 5,
+      difficulty: { stepScore: 20, speedFactor: 0.12 }
+    };
+
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+
+    // HUD
+    const scoreEl = document.getElementById("score");
+    const bestEl = document.getElementById("best");
+    const speedEl = document.getElementById("speed");
+    const startBtn = document.getElementById("startBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const speedBtn = document.getElementById("speedBtn");
+
+    // Mobile controls
+    const leftBtn = document.getElementById("leftBtn");
+    const rightBtn = document.getElementById("rightBtn");
+    const pauseMobile = document.getElementById("pauseMobile");
+    const mobileStart = document.getElementById("mobileStart");
+    const mobileRestart = document.getElementById("mobileRestart");
+
+    // Game state
+    const state = {
+      running: false,
+      paused: false,
+      tLast: 0,
+      speedMul: 1,
+      score: 0,
+      best: Number(localStorage.getItem("angelthon_best") || 0),
+      shield: { active: false, until: 0 },
+      player: { x: cfg.world.w/2 - cfg.player.w/2, y: cfg.player.y, w: cfg.player.w, h: cfg.player.h },
+      obstacles: [],
+      orbs: [],
+      powers: [],
+      timers: { obstacle: 0, orb: 0, shield: 0 }
+    };
+    bestEl.textContent = state.best;
+
+    // Utils
+    function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+    function rand(a, b) { return Math.random() * (b - a) + a; }
+    function chance(p) { return Math.random() < p; }
+
+    // Input
+    const keys = { left: false, right: false };
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft" || e.key.toLowerCase() === "a") keys.left = true;
+      if (e.key === "ArrowRight" || e.key.toLowerCase() === "d") keys.right = true;
+      if (e.key.toLowerCase() === "p") togglePause();
+      if (e.key.toLowerCase() === "r") restart();
+    });
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "ArrowLeft" || e.key.toLowerCase() === "a") keys.left = false;
+      if (e.key === "ArrowRight" || e.key.toLowerCase() === "d") keys.right = false;
+    });
+
+    // Mobile buttons (press and hold)
+    function hold(btn, onDown, onUp) {
+      btn.addEventListener("pointerdown", (e) => { e.preventDefault(); onDown(); });
+      btn.addEventListener("pointerup", (e) => { e.preventDefault(); onUp(); });
+      btn.addEventListener("pointerleave", (e) => { e.preventDefault(); onUp(); });
+    }
+    hold(leftBtn, () => keys.left = true, () => keys.left = false);
+    hold(rightBtn, () => keys.right = true, () => keys.right = false);
+    pauseMobile.addEventListener("click", togglePause);
+    mobileStart.addEventListener("click", start);
+    mobileRestart.addEventListener("click", restart);
+
+    // Buttons
+    startBtn.addEventListener("click", start);
+    pauseBtn.addEventListener("click", togglePause);
+    restartBtn.addEventListener("click", restart);
+    speedBtn.addEventListener("click", () => {
+      const levels = [1, 1.25, 1.5, 1.75, 2];
+      const i = levels.indexOf(state.speedMul);
+      state.speedMul = levels[(i + 1) % levels.length];
+      speedEl.textContent = `${state.speedMul.toFixed(2)}x`;
+    });
+
+    // Game loop
+    function start() {
+      if (state.running) return;
+      reset();
+      state.running = true;
+      state.paused = false;
+      requestAnimationFrame(loop);
+    }
+
+    function togglePause() {
+      if (!state.running) return;
+      state.paused = !state.paused;
+    }
+
+    function restart() {
+      reset();
+      if (!state.running) {
+        state.running = true;
+        requestAnimationFrame(loop);
+      }
+    }
+
+    function reset() {
+      state.tLast = performance.now();
+      state.score = 0;
+      state.shield.active = false;
+      state.shield.until = 0;
+      state.player.x = cfg.world.w/2 - cfg.player.w/2;
+      state.obstacles.length = 0;
+      state.orbs.length = 0;
+      state.powers.length = 0;
+      state.timers.obstacle = 0;
+      state.timers.orb = 0;
+      state.timers.shield = 0;
+      drawIntro();
+      scoreEl.textContent = state.score;
+    }
+
+    function loop(tNow) {
+      if (!state.running) return;
+      const dt = Math.min(0.033, (tNow - state.tLast) / 1000) * state.speedMul;
+      state.tLast = tNow;
+
+      if (!state.paused) {
+        update(dt);
+        render();
+      } else {
+        drawPaused();
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    // Update
+    function update(dt) {
+      // Difficulty scaling
+      const diffScale = 1 + Math.floor(state.score / cfg.difficulty.stepScore) * cfg.difficulty.speedFactor;
+
+      // Player move
+      let vx = 0;
+      if (keys.left) vx -= cfg.player.speed;
+      if (keys.right) vx += cfg.player.speed;
+      state.player.x = clamp(state.player.x + vx * dt, 8, cfg.world.w - state.player.w - 8);
+
+      // Spawns
+      state.timers.obstacle += dt * 1000;
+      state.timers.orb += dt * 1000;
+      state.timers.shield += dt * 1000;
+
+      if (state.timers.obstacle >= cfg.spawn.obstacleMs / diffScale) {
+        spawnObstacle(diffScale);
+        state.timers.obstacle = 0;
+      }
+      if (state.timers.orb >= cfg.spawn.orbMs) {
+        spawnOrb();
+        state.timers.orb = 0;
+      }
+      if (state.timers.shield >= cfg.spawn.shieldMs) {
+        spawnShield();
+        state.timers.shield = 0;
+      }
+
+      // Move entities
+      moveEntities(dt, diffScale);
+
+      // Collisions and scoring
+      handleCollisions();
+
+      // Shield timeout
+      if (state.shield.active && performance.now() > state.shield.until) {
+        state.shield.active = false;
+      }
+
+      scoreEl.textContent = state.score;
+      if (state.score > state.best) {
+        state.best = state.score;
+        localStorage.setItem("angelthon_best", String(state.best));
+        bestEl.textContent = state.best;
+      }
+    }
+
+    function spawnObstacle(diffScale) {
+      const w = rand(cfg.obstacle.wMin, cfg.obstacle.wMax);
+      state.obstacles.push({
+        x: rand(8, cfg.world.w - w - 8),
+        y: -cfg.obstacle.h,
+        w, h: cfg.obstacle.h,
+        speed: cfg.obstacle.speed * diffScale,
+        color: "#ef4444"
+      });
+    }
+
+    function spawnOrb() {
+      state.orbs.push({
+        x: rand(12, cfg.world.w - 12),
+        y: -cfg.orb.r * 2,
+        r: cfg.orb.r,
+        speed: cfg.orb.speed,
+        color: cfg.orb.color
+      });
+    }
+
+    function spawnShield() {
+      state.powers.push({
+        x: rand(16, cfg.world.w - 16 - cfg.shield.w),
+        y: -cfg.shield.h,
+        w: cfg.shield.w, h: cfg.shield.h,
+        speed: cfg.shield.speed,
+        color: cfg.shield.color,
+        type: "shield"
+      });
+    }
+
+    function moveEntities(dt, diffScale) {
+      const H = cfg.world.h;
+      state.obstacles.forEach(o => o.y += o.speed * dt);
+      state.orbs.forEach(o => o.y += o.speed * dt);
+      state.powers.forEach(p => p.y += p.speed * dt);
+
+      state.obstacles = state.obstacles.filter(o => o.y < H + 40);
+      state.orbs = state.orbs.filter(o => o.y < H + 40);
+      state.powers = state.powers.filter(p => p.y < H + 40);
+    }
+
+    function rectsIntersect(a, b) {
+      return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    }
+
+    function circleRectCollide(c, r) {
+      const cx = clamp(c.x, r.x, r.x + r.w);
+      const cy = clamp(c.y, r.y, r.y + r.h);
+      const dx = c.x - cx, dy = c.y - cy;
+      return dx*dx + dy*dy <= c.r*c.r;
+    }
+
+    function handleCollisions() {
+      const playerRect = state.player;
+
+      // Obstacles
+      for (let i = 0; i < state.obstacles.length; i++) {
+        const o = state.obstacles[i];
+        if (rectsIntersect(playerRect, o)) {
+          if (state.shield.active) {
+            // Consume obstacle when shielded
+            state.obstacles.splice(i, 1);
+            i--;
+          } else {
+            gameOver();
+            return;
+          }
+        }
+      }
+
+      // Orbs
+      for (let i = 0; i < state.orbs.length; i++) {
+        const o = state.orbs[i];
+        if (circleRectCollide({ x: o.x, y: o.y, r: o.r }, playerRect)) {
+          state.score += cfg.scorePerOrb;
+          state.orbs.splice(i, 1);
+          i--;
+        }
+      }
+
+      // Powers
+      for (let i = 0; i < state.powers.length; i++) {
+        const p = state.powers[i];
+        if (rectsIntersect(playerRect, p)) {
+          if (p.type === "shield") {
+            state.shield.active = true;
+            state.shield.until = performance.now() + cfg.shield.duration;
+          }
+          state.powers.splice(i, 1);
+          i--;
+        }
+      }
+    }
+
+    function gameOver() {
+      state.running = false;
+      render();
+      drawGameOver();
+    }
+
+    // Render
+    function render() {
+      const W = cfg.world.w, H = cfg.world.h;
+      ctx.clearRect(0, 0, W, H);
+
+      // Background stars
+      drawStars();
+
+      // Player
+      drawPlayer();
+
+      // Obstacles
+      state.obstacles.forEach(o => {
+        ctx.fillStyle = o.color;
+        ctx.fillRect(o.x, o.y, o.w, o.h);
+        ctx.strokeStyle = "#a61b1b";
+        ctx.strokeRect(o.x, o.y, o.w, o.h);
+      });
+
+      // Orbs
+      state.orbs.forEach(o => {
+        ctx.fillStyle = o.color;
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      // Powers (shield)
+      state.powers.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+      });
+
+      // Shield aura
+      if (state.shield.active) {
+        ctx.strokeStyle = "rgba(16,185,129,.6)";
+        ctx.lineWidth = 3;
+        ctx.strokeRect(state.player.x - 2, state.player.y - 2, state.player.w + 4, state.player.h + 4);
+        ctx.lineWidth = 1;
+      }
+
+      // HUD overlay text
+      ctx.fillStyle = "rgba(231,236,243,.85)";
+      ctx.font = "bold 14px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillText("Очки: " + state.score, 12, 24);
+      ctx.fillText("Рекорд: " + state.best, 12, 42);
+      ctx.fillText("Скорость: " + state.speedMul.toFixed(2) + "x", 12, 60);
+    }
+
+    function drawPlayer() {
+      const p = state.player;
+      const gradient = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+      gradient.addColorStop(0, "#7dd3fc");
+      gradient.addColorStop(1, "#4fb9f0");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      // nose/indicator
+      ctx.fillStyle = "#e7ecf3";
+      ctx.fillRect(p.x + p.w/2 - 2, p.y - 6, 4, 6);
+    }
+
+    function drawStars() {
+      const W = cfg.world.w, H = cfg.world.h;
+      ctx.save();
+      for (let i = 0; i < 40; i++) {
+        const x = (i * 19 % W), y = (i * 53 % H);
+        ctx.fillStyle = i % 7 === 0 ? "rgba(167,139,250,.8)" : "rgba(125,211,252,.7)";
+        ctx.fillRect(x, y, 2, 2);
+      }
+      ctx.restore();
+    }
+
+    function drawIntro() {
+      const W = cfg.world.w, H = cfg.world.h;
+      ctx.clearRect(0, 0, W, H);
+      drawStars();
+      ctx.fillStyle = "rgba(231,236,243,.95)";
+      ctx.font = "bold 28px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillText("Angelthon Runner", W/2 - 150, H/2 - 20);
+      ctx.font = "16px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillText("← → уклоняйся от препятствий, собирай орбы", W/2 - 210, H/2 + 10);
+      ctx.fillText("Нажми Старт или клавишу R", W/2 - 130, H/2 + 34);
+    }
+
+    function drawPaused() {
+      ctx.save();
+      ctx.fillStyle = "rgba(15,22,41,.6)";
+      ctx.fillRect(0, 0, cfg.world.w, cfg.world.h);
+      ctx.fillStyle = "#e7ecf3";
+      ctx.font = "bold 26px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillText("Пауза", cfg.world.w/2 - 40, cfg.world.h/2);
+      ctx.restore();
+    }
+
+    function drawGameOver() {
+      ctx.save();
+      ctx.fillStyle = "rgba(15,22,41,.7)";
+      ctx.fillRect(0, 0, cfg.world.w, cfg.world.h);
+      ctx.fillStyle = "#ef4444";
+      ctx.font = "bold 28px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillText("Игра окончена", cfg.world.w/2 - 110, cfg.world.h/2 - 10);
+      ctx.fillStyle = "#e7ecf3";
+      ctx.font = "16px " + getComputedStyle(document.body).fontFamily;
+      ctx.fillText("R — рестарт, P — пауза", cfg.world.w/2 - 90, cfg.world.h/2 + 18);
+      ctx.restore();
+    }
+
+    // Init
+    reset();
+  </script>
+</body>
+</html>
